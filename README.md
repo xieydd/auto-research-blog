@@ -8,6 +8,7 @@
 - 在固定预算内迭代
 - 每轮判断 `keep` 或 `discard`
 - 支持之后继续实验
+- 按文章工作区隔离实验状态，避免多篇并行互相覆盖
 
 ## 适用场景
 
@@ -29,6 +30,7 @@
 autoresearch-blog
 autoresearch-blog:3
 autoresearch-blog:5
+autoresearch-blog:3 observability-at-agent-speed.zh-CN.md
 ```
 
 继续实验：
@@ -37,12 +39,15 @@ autoresearch-blog:5
 autoresearch-blog:continue
 autoresearch-blog:continue:3
 autoresearch-blog:continue:5@100
+autoresearch-blog:continue:20@100 observability-at-agent-speed.zh-CN.md
 ```
 
 含义：
 
 - `N` 表示这次最多迭代多少轮
 - `@TARGET` 表示把目标分数改成新的目标
+- `continue` 默认继续“当前这篇文章”的实验，不再共享仓库级 active 指针
+- 如果命令里显式带了文章路径，则优先按该文章路径定位实验
 
 ## 怎么加到 agent 里
 
@@ -133,7 +138,18 @@ cp -R /path/to/autoresearch-blog ~/.claude/skills/autoresearch-blog
 
 ```text
 .autoresearch-blog/
+  articles/
+    <article_slug>/
+      active_experiment.json
+      experiments/
+        <experiment_id>/
 ```
+
+说明：
+
+- 每篇文章各自维护一个 `active_experiment.json`
+- 这样同一仓库里并行优化多篇文章时，不会因为 `continue` 覆盖到别的文章
+- `article_slug` 默认基于文章名生成；如果可能重名，建议加稳定短 hash
 
 ## 例子
 
@@ -146,6 +162,12 @@ autoresearch-blog:3
 
 ```text
 autoresearch-blog:continue:5@100
+```
+
+继续指定文章并提高目标：
+
+```text
+autoresearch-blog:continue:20@100 observability-at-agent-speed.zh-CN.md
 ```
 
 ## 说明

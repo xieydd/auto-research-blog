@@ -13,48 +13,79 @@ description: Iteratively improve and judge a blog post with explicit keep/discar
 
 - `autoresearch-blog`
   - 使用默认最大迭代次数 `3`
+- `autoresearch-blog <article_path>`
+  - 显式指定本次实验对应的文章路径
+  - 当会话里同时存在多篇文章，推荐总是带上
 - `autoresearch-blog:N`
   - `N` 表示最大迭代次数
   - `N` 必须是正整数
   - 建议范围 `1-10`
   - 若用户给出过大的数字，也应提醒收益递减和时间成本
+- `autoresearch-blog:N <article_path>`
+  - 对指定文章新建实验，并限制本次最大迭代次数为 `N`
 - `autoresearch-blog:continue`
   - 继续最近一次未完成，或用户明确指定要继续的实验
   - 默认再追加 `3` 轮预算，而不是重置总历史
+- `autoresearch-blog:continue <article_path>`
+  - 继续指定文章当前工作区下的 active experiment
 - `autoresearch-blog:continue:N`
   - 在继续已有实验的前提下，再允许最多 `N` 轮新增迭代
   - `N` 只表示这次追加预算，不覆盖实验历史中的已用轮数
+- `autoresearch-blog:continue:N <article_path>`
+  - 对指定文章继续实验，并追加 `N` 轮预算
 - `autoresearch-blog:continue:N@TARGET`
   - 在继续已有实验的前提下，再允许最多 `N` 轮新增迭代，并把目标分数改为 `TARGET`
   - 例如：`autoresearch-blog:continue:3@90`
   - `TARGET` 按 `0-100` 计
   - 若显式提供了新 target，必须先确认，再更新实验状态
+- `autoresearch-blog:continue:N@TARGET <article_path>`
+  - 例如：`autoresearch-blog:continue:20@100 observability-at-agent-speed.zh-CN.md`
+  - 对指定文章继续实验，追加 `N` 轮预算，并将目标分数更新为 `TARGET`
+
+参数优先级必须明确：
+
+1. 如果命令里显式提供了 `<article_path>`，必须以它为准
+2. 否则再尝试从当前会话上下文推断当前文章
+3. 只有在仍然无法唯一定位时，才要求用户指定文章
 
 ## 2. Experiment State on Disk
 
-每次正式实验都必须在仓库根目录下写入 `.autoresearch-blog/`。建议结构：
+每次正式实验都必须在仓库根目录下写入 `.autoresearch-blog/`。为了支持多篇文章并行，实验状态必须按文章隔离，不能再共用一个仓库级 `active_experiment.json`。建议结构：
 
 ```text
 .autoresearch-blog/
-  active_experiment.json
-  experiments/
-    <experiment_id>/
-      meta.json
-      state.json
-      results.jsonl
-      progress.svg
-      versions/
-        v0.md
-        v1.md
-        ...
+  articles/
+    <article_slug>/
+      active_experiment.json
+      experiments/
+        <experiment_id>/
+          meta.json
+          state.json
+          results.jsonl
+          progress.svg
+          versions/
+            v0.md
+            v1.md
+            ...
 ```
+
+其中：
+
+- `article_slug`
+  - 默认基于文章文件名或标题生成可读目录名
+  - 若不同文章可能得到同名 slug，必须追加稳定短 hash，避免两个 `draft.md` 写进同一个目录
+  - 推荐形式：`observability-at-agent-speed--a1b2c3d4`
+- 单篇文章的磁盘工作区是：
+  - `.autoresearch-blog/articles/<article_slug>/`
+- 同一篇文章的所有实验共享同一个文章工作区
+- 不同文章之间禁止共享 `active_experiment.json`
 
 各文件职责：
 
 - `active_experiment.json`
-  - 指向当前默认继续的实验
+  - 指向该文章当前默认继续的实验
 - `meta.json`
-  - 保存文章路径、experiment id、创建时间、target、初始上下文
+  - 保存文章路径、`article_slug`、experiment id、创建时间、target、初始上下文
 - `state.json`
   - 保存当前最佳版本、当前分数、已用迭代数、剩余预算、是否达标、停止原因
 - `results.jsonl`
@@ -68,6 +99,17 @@ description: Iteratively improve and judge a blog post with explicit keep/discar
 默认不要为每个 `discard` 版本保存完整全文。对大多数 blog 实验来说，这些全文会快速堆积，但对后续决策帮助有限。
 
 磁盘状态是 source of truth。继续实验时，必须先读磁盘，再决定下一轮做什么。不要依赖对话记忆。
+
+如果磁盘上仍然是旧布局：
+
+```text
+.autoresearch-blog/
+  active_experiment.json
+  experiments/
+    <experiment_id>/
+```
+
+则可以把它视为 legacy single-article layout。继续实验时允许读取它，但一旦新建或迁移实验，应优先写入文章隔离后的新布局。
 
 ## 3. Required Preflight
 
@@ -105,17 +147,22 @@ description: Iteratively improve and judge a blog post with explicit keep/discar
     - 至少额外加入这两类挑战：
       - 这段文字还有哪些地方“明显像 AI 写的”
       - 为了去 AI 痕迹，这轮修改有没有把原意、具体性或作者声音一起削掉
+      - 有没有句子先急着做边界管理或免责声明，而不是先把观察和判断说出来
+      - 有没有 `不是 A，也不是 B，只是 C` 或类似过度工整的防御性结构
 
 如果用户只给了 `autoresearch-blog:N`，但没有给 target，就先确认 target，再开始 baseline judge。
 
 如果用户要求 `continue`：
 
-- 优先读取 `.autoresearch-blog/active_experiment.json`
-- 若存在多个候选实验且无法唯一判断，应让用户指定
+- 如果命令里显式带了 `<article_path>`，优先使用它生成 `article_slug`
+- 否则再根据当前文章路径或当前文稿生成 `article_slug`
+- 然后读取 `.autoresearch-blog/articles/<article_slug>/active_experiment.json`
+- 如果当前上下文无法唯一判断是哪篇文章，再让用户指定文章
+- 只有在文章级工作区不存在、且仓库里只有一个 legacy 实验时，才回退读取 `.autoresearch-blog/active_experiment.json`
 - 若历史实验已经 `target_met = true`，也可以继续，但必须提示这是在“达标后继续优化”，收益可能很低
 - 若命令里带了 `@TARGET`，则这是一次显式 target 变更：
   - 必须先确认新 target
-  - 确认后更新 `active_experiment.json` 和 `state.json`
+  - 确认后更新当前文章工作区下的 `active_experiment.json` 和 `state.json`
   - 并在 `results.jsonl` 追加一条 `target-change` 事件
 
 ## 4. Judge Contract
@@ -139,12 +186,29 @@ description: Iteratively improve and judge a blog post with explicit keep/discar
 
 新实验开始时，必须先做以下落盘动作：
 
-1. 生成 `experiment_id`
-2. 创建实验目录
-3. 将原稿保存为 `versions/v0.md`
-4. 做 baseline judge
-5. 把 baseline 结果写入 `state.json` 和 `results.jsonl`
-6. 更新 `active_experiment.json`
+1. 确定当前文章路径
+2. 基于当前文章路径生成 `article_slug`
+3. 创建文章工作区
+4. 生成 `experiment_id`
+5. 创建实验目录
+6. 将原稿保存为 `versions/v0.md`
+7. 做 baseline judge
+8. 把 baseline 结果写入 `state.json` 和 `results.jsonl`
+9. 更新文章工作区下的 `active_experiment.json`
+
+更具体地说，创建路径应类似于：
+
+```text
+.autoresearch-blog/articles/<article_slug>/experiments/<experiment_id>/
+```
+
+`active_experiment.json` 也应写在：
+
+```text
+.autoresearch-blog/articles/<article_slug>/active_experiment.json
+```
+
+而不是仓库根级共享一份。
 
 baseline 不是口头描述，必须是可恢复的实验起点。
 
@@ -188,6 +252,8 @@ baseline 完成后，还要做一次 checkpoint：
 - 是否保住了原意，而不是只把句子改得更粗糙
 - 是否保住了具体性，而不是把文本改成另一种空泛
 - 是否保住了作者声音，而不是从“AI 腔”变成“模板化人类腔”
+- 是否把作者真正的观察和判断提前了，而不是继续把力气花在防御性澄清和边界管理上
+- 是否压掉了“交代过满”的解释链，让句子更像人在说判断，而不是在写标准说明
 
 对不同语言的 blog，局部 prose 问题还包括对应的默认语言规则：
 
@@ -218,6 +284,8 @@ baseline 完成后，还要做一次 checkpoint：
   - 去掉明显的 chatbot residue、servile tone、generic positive conclusions
   - 把 present-participle 假深度、rule of three、copula avoidance、过多 em dash 等模式改回自然表达
   - 在不失真的前提下恢复具体态度、真实犹豫和节奏变化
+  - 把“这里先把边界说清楚”“不是 A，也不是 B，只是 C”这类免责声明腔改成更直接的观察和判断
+  - 把本来可以一句说清的解释链压短，先说看到了什么，再说这意味着什么
 
 默认避免的坏 mutation：
 
@@ -231,6 +299,8 @@ baseline 完成后，还要做一次 checkpoint：
   - 为了“像人写的”强行加入假情绪、假个性或无关口语
   - 一味打碎句子，让文本变得粗糙但并没有更自然
   - 去掉 AI 痕迹的同时，也去掉了信息密度、精度或作者声音
+  - 句子表面上更松了，但本质上还在做同一层免责声明和误解预防
+  - 把“交代过满”改成“更散地交代”，而不是改成更直接的判断
 
 如果某轮改动无法用一句清晰的 `mutation_hypothesis` 描述，通常说明这轮改动范围太散，不应继续。
 
@@ -238,8 +308,9 @@ baseline 完成后，还要做一次 checkpoint：
 
 1. 先问：`What still makes this text obviously AI-generated?`
 2. 用 3-5 条短 bullet 写出剩余 tell
-3. 再只针对这些 tell 做最后一轮小修
-4. 不要因为这次 audit 而重写全文
+3. 再问：`Which sentences are still doing defensive clarification or overexplaining instead of making a judgment?`
+4. 再只针对这些 tell 做最后一轮小修
+5. 不要因为这次 audit 而重写全文
 
 ## 7. Progress Reminder Format
 
@@ -376,13 +447,16 @@ Continuing experiment exp-20260324-001 | used 1 iterations | additional budget 3
 
 当用户说“继续实验”时，不要重复 baseline，也不要重写历史。应该：
 
-1. 读取当前 active experiment
-2. 找到 `state.json` 中的最佳版本
-3. 读取最近几轮 `results.jsonl`
-4. 基于未解决问题继续下一轮
-5. 将新一轮作为新的 `version_id` 追加
+1. 先确定当前文章对应的 `article_slug`
+2. 读取该文章工作区下的 `active_experiment.json`
+3. 找到 `state.json` 中的最佳版本
+4. 读取最近几轮 `results.jsonl`
+5. 基于未解决问题继续下一轮
+6. 将新一轮作为新的 `version_id` 追加
 
 如果用户没有显式要求新实验，优先继续已有实验，而不是偷偷新建一个。
+
+这里的“已有实验”默认指“同一篇文章的已有实验”，不是仓库里任意一篇文章最近跑过的实验。
 
 如果某轮出现分数下降：
 
@@ -394,7 +468,7 @@ Continuing experiment exp-20260324-001 | used 1 iterations | additional budget 3
 如果用户使用 `autoresearch-blog:continue:N@TARGET`：
 
 1. 先解析出追加预算 `N` 和新目标 `TARGET`
-2. 读取当前 active experiment
+2. 读取当前文章对应的 active experiment
 3. 显式确认新 target
 4. 将 target 变更写入状态和日志
 5. 再开始新的追加迭代
