@@ -30,7 +30,7 @@
 autoresearch-blog
 autoresearch-blog:3
 autoresearch-blog:5
-autoresearch-blog:3 observability-at-agent-speed.zh-CN.md
+autoresearch-blog:3 sample.md
 ```
 
 继续实验：
@@ -39,7 +39,7 @@ autoresearch-blog:3 observability-at-agent-speed.zh-CN.md
 autoresearch-blog:continue
 autoresearch-blog:continue:3
 autoresearch-blog:continue:5@100
-autoresearch-blog:continue:20@100 observability-at-agent-speed.zh-CN.md
+autoresearch-blog:continue:20@100 sample.md
 ```
 
 含义：
@@ -167,7 +167,7 @@ autoresearch-blog:continue:5@100
 继续指定文章并提高目标：
 
 ```text
-autoresearch-blog:continue:20@100 observability-at-agent-speed.zh-CN.md
+autoresearch-blog:continue:20@100 sample.md
 ```
 
 ## 说明

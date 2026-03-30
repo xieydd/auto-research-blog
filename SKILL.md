@@ -39,7 +39,7 @@ description: Iteratively improve and judge a blog post with explicit keep/discar
   - `TARGET` 按 `0-100` 计
   - 若显式提供了新 target，必须先确认，再更新实验状态
 - `autoresearch-blog:continue:N@TARGET <article_path>`
-  - 例如：`autoresearch-blog:continue:20@100 observability-at-agent-speed.zh-CN.md`
+  - 例如：`autoresearch-blog:continue:20@100 sample.md`
   - 对指定文章继续实验，追加 `N` 轮预算，并将目标分数更新为 `TARGET`
 
 参数优先级必须明确：
